@@ -1,0 +1,26 @@
+Incident_ID,Date_Reported,Company_Name,Industry,Country,Attack_Type,Records_Compromised,Attack_Vector,Data_Types_Stolen,Ransom_Amount_USD,Recovery_Time_Days,Financial_Impact_Million_USD,CISO_Present,Security_Budget_Million_USD,Employee_Count,Previous_Incidents,Patch_Status,MFA_Enabled,Security_Training_Hours,Incident_Severity,Attribution,Response_Time_Hours,Regulatory_Fine_Million_USD,Stock_Impact_Percent,Customer_Churn_Percent,Reputation_Score_Change
+CYB_001,15-01-2024,HealthTech Solutions,Healthcare,United States,Ransomware,2400000,Phishing_Email,"PII,PHI,Financial",2.5,45,125,Yes,15,12500,1,Outdated,No,8,Critical,APT29,72,8.5,-12.3,15.2,-25
+CYB_002,22-01-2024,GlobalBank Corp,Financial,United Kingdom,Data_Breach,890000,SQL_Injection,"Financial,PII",0,21,89,Yes,45,45000,0,Current,Yes,24,High,Unknown,12,15.2,-8.7,8.9,-18
+CYB_003,03-02-2024,EduPlatform Inc,Education,Canada,Ransomware,567000,Remote_Access,"PII,Academic_Records",1.2,18,34.5,No,2.1,3400,2,Outdated,No,4,High,Conti,96,2.1,-5.4,12.1,-15
+CYB_004,14-02-2024,RetailGiant Ltd,Retail,Australia,Payment_Fraud,1200000,Card_Skimming,"Payment_Cards,PII",0,8,67.8,Yes,8.9,23000,1,Current,Partial,12,High,Organized_Crime,6,0,-3.2,6.7,-8
+CYB_005,28-02-2024,TechStartup Pro,Technology,Germany,Insider_Threat,45000,Privileged_Access,"IP,Customer_Data",0,5,12.3,Yes,3.2,890,0,Current,Yes,16,Medium,Employee,24,0,-1.8,3.4,-5
+CYB_006,07-03-2024,ManufacturingCorp,Manufacturing,Japan,Industrial_Espionage,0,APT_Attack,"Trade_Secrets,Designs",0,90,234.5,Yes,12.5,15600,1,Outdated,Yes,20,Critical,APT1,168,0,-15.6,2.1,-35
+CYB_007,18-03-2024,CloudStorage Inc,Technology,United States,Data_Exposure,3400000,Misconfiguration,"PII,Business_Data",0,12,156.7,No,6.7,2300,3,Current,No,6,Critical,None,4,45.6,-22.1,25.8,-42
+CYB_008,25-03-2024,MedDevice Corp,Healthcare,Switzerland,Supply_Chain,890000,Third_Party,"PHI,Device_Data",0,65,78.9,Yes,23.4,8900,0,Current,Yes,32,High,APT40,120,12.3,-6.8,9.2,-12
+CYB_009,02-04-2024,SocialMedia Plus,Technology,Ireland,Account_Takeover,12000000,Credential_Stuffing,"PII,Messages",0,30,445.6,Yes,67.8,15000,2,Current,Partial,18,Critical,Botnet,8,89.5,-18.9,18.7,-38
+CYB_010,15-04-2024,PowerUtility Co,Energy,United States,OT_Attack,0,Network_Intrusion,"SCADA_Data,Grid_Info",0,120,567.8,Yes,34.5,12000,1,Outdated,No,28,Critical,Lazarus,240,0,-8.9,0,-22
+CYB_011,23-04-2024,LegalFirm Partners,Legal,United States,Email_Compromise,125000,BEC_Attack,"Legal_Documents,PII",0.35,14,23.4,No,1.2,450,0,Current,No,12,Medium,Nigeria_Based,48,0,-2.1,8.9,-18
+CYB_012,01-05-2024,AirlineGlobal,Transportation,France,Passenger_Data,2100000,Web_Application,"PII,Travel_Data",0,25,123.4,Yes,18.9,34000,1,Current,Yes,22,High,Unknown,18,34.5,-11.2,14.6,-28
+CYB_013,12-05-2024,CryptoExchange,Financial,Singapore,Wallet_Hack,0,Smart_Contract,Cryptocurrency,45.6,180,456.7,Yes,12.3,560,2,Current,Yes,40,Critical,North_Korea,2,0,-35.6,45.2,-55
+CYB_014,28-05-2024,HotelChain Int,Hospitality,Spain,POS_Malware,890000,Malware,"Payment_Cards,PII",0,35,67.8,No,3.4,18900,3,Outdated,No,8,High,Carbanak,72,8.9,-4.5,12.3,-16
+CYB_015,05-06-2024,PharmaCorp,Pharmaceutical,United States,Research_Theft,0,Spear_Phishing,"Research_Data,IP",0,60,234.5,Yes,45.6,23400,0,Current,Yes,36,Critical,APT1,96,0,-9.8,3.4,-25
+CYB_016,18-06-2024,SmartCity Tech,Government,Netherlands,IoT_Breach,456000,IoT_Vulnerability,"Citizen_Data,Sensor_Data",0,45,78.9,Yes,8.9,2300,1,Outdated,Partial,14,High,Unknown,72,12.1,0,0,-20
+CYB_017,25-06-2024,GameStudio Pro,Entertainment,South Korea,Gaming_Hack,3400000,Database_Breach,"Gaming_Data,PII",0,28,89.7,No,2.1,890,2,Current,No,6,High,Hacktivists,24,15.6,-8.9,22.1,-32
+CYB_018,03-07-2024,InsuranceMega,Insurance,United States,Claims_Fraud,1200000,Social_Engineering,"PII,Claims_Data",0,40,156.8,Yes,23.4,15600,1,Current,Yes,20,High,Organized_Crime,36,45.7,-7.2,11.8,-22
+CYB_019,15-07-2024,TelecomGiant,Telecommunications,Brazil,Network_Breach,5600000,Zero_Day,"Call_Records,PII",0,75,345.6,Yes,34.5,45000,1,Outdated,Yes,18,Critical,APT28,144,67.8,-13.4,16.9,-35
+CYB_020,22-07-2024,FoodDelivery,Technology,India,App_Vulnerability,2300000,Mobile_App,"Location_Data,PII",0,18,67.9,No,1.8,4500,0,Current,No,4,High,Unknown,12,8.9,-12.1,18.7,-28
+CYB_021,01-08-2024,AutomotiveTech,Automotive,Germany,Connected_Car,890000,V2X_Attack,"Vehicle_Data,Location",0,90,234.6,Yes,45.7,34000,0,Current,Yes,32,Critical,APT32,120,0,-18.9,8.2,-42
+CYB_022,08-08-2024,RealEstate Pro,Real Estate,United States,Property_Fraud,345000,Wire_Fraud,"Financial,Property_Data",2.3,25,34.5,No,0.8,1200,1,Outdated,No,2,Medium,BEC_Group,72,0,-3.4,15.6,-12
+CYB_023,12-08-2024,StreamingCorp,Entertainment,United States,Content_Piracy,0,DRM_Bypass,"Content,Subscriber_Data",0,120,456.7,Yes,23.4,8900,2,Current,Partial,16,High,Piracy_Group,48,0,-8.7,12.9,-25
+CYB_024,14-08-2024,AgriTech Solutions,Agriculture,Australia,Precision_Ag,125000,Drone_Hack,"Farm_Data,GPS_Coordinates",0,14,12.3,No,1.2,340,0,Outdated,No,8,Medium,Unknown,96,0,-2.1,5.8,-8
+CYB_025,15-08-2024,FinTech Startup,Financial,United Kingdom,API_Abuse,567000,API_Attack,"Financial,Transaction_Data",0,21,78.9,Yes,8.9,1200,1,Current,Yes,28,High,Cybercriminals,8,23.4,-15.6,28.9,-35
