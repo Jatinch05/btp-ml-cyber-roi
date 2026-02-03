@@ -7,15 +7,18 @@ Run:
   streamlit run app.py
 """
 
+import os
+import json
 import streamlit as st
 import pandas as pd
-import os
 import plotly.express as px
+import requests
 from pathlib import Path
 
 st.set_page_config(page_title="Cyber Risk & ROI Dashboard", layout="wide")
 
-DATA_PATH = Path("../data/processed/enriched.csv")  # relative to frontend/
+DATA_PATH = Path("../data/processed/combined_enriched_core.csv")  # relative to frontend/
+API_URL = os.getenv("API_URL", "http://localhost:8000/predict")
 st.title("Cyber Risk & ROI Dashboard — BTP (Prototype)")
 
 # --- helper: load or create sample dataset ---
@@ -38,37 +41,80 @@ def load_or_make_sample(path: Path):
 
 df = load_or_make_sample(DATA_PATH)
 
-# --- Sidebar: filters and mock prediction input ---
+# --- Sidebar: filters and prediction input ---
 st.sidebar.header("Controls & Predict")
 industry_options = ["All"] + sorted(df["Industry"].unique().tolist())
 attack_options = ["All"] + sorted(df["Attack_Type"].unique().tolist())
 selected_industry = st.sidebar.selectbox("Industry", industry_options, index=0)
 selected_attack = st.sidebar.selectbox("Attack Type", attack_options, index=0)
 
-# Mock prediction form
+# Prediction form (calls backend; optional fields can be left blank)
 st.sidebar.markdown("---")
-st.sidebar.subheader("Mock Prediction")
+st.sidebar.subheader("Predict (API)")
 with st.sidebar.form("predict_form"):
-    in_industry = st.selectbox("Industry (input)", industry_options[1:] if len(industry_options)>1 else ["Finance"])
-    in_attack = st.selectbox("Attack Type (input)", attack_options[1:] if len(attack_options)>1 else ["Phishing"])
-    in_emp = st.number_input("Employee count", min_value=1, value=500)
-    in_severity = st.selectbox("Incident Severity", ["Low","Medium","High","Critical"])
-    submitted = st.form_submit_button("Show prediction")
+    in_industry = st.selectbox("Industry (required)", industry_options[1:] if len(industry_options)>1 else ["Finance"])
+    in_attack = st.selectbox("Attack Type (required)", attack_options[1:] if len(attack_options)>1 else ["Phishing"])
+    in_data_type = st.text_input("Data Type (required)", value="", placeholder="e.g., pii_customer")
+    in_emp = st.number_input("Employee count (optional)", min_value=0, value=0, step=1)
+    in_records = st.number_input("Records Compromised (required)", min_value=1, value=1)
+    in_severity = st.selectbox("Incident Severity (optional)", ["Auto (fill baseline)", "Low","Medium","High","Critical"], index=0)
+    in_budget = st.text_input("Security Budget (M$) (optional)", value="", placeholder="leave blank to auto-fill")
+    in_year = st.text_input("Year (required)", value="", placeholder="e.g., 2025")
+    in_country = st.text_input("Country (optional)", value="", placeholder="leave blank to auto-fill")
+    in_recovery = st.text_input("Recovery Time (days) (optional)", value="", placeholder="leave blank to auto-fill")
+    submitted = st.form_submit_button("Predict")
 if submitted:
-    # simple deterministic mock logic — backend will replace this later
-    base = 4.44  # global anchor (millions)
-    industry_multiplier = {
-        "Healthcare": 2.0,
-        "Finance": 1.5,
-        "Technology":1.2,
-        "Retail":0.9,
-        "Public":0.8
-    }.get(in_industry, 1.0)
-    severity_multiplier = {"Low":0.5,"Medium":1.0,"High":1.8,"Critical":3.0}.get(in_severity,1.0)
-    emp_factor = (in_emp / 1000) ** 0.5
-    predicted = round(base * industry_multiplier * severity_multiplier * emp_factor, 2)
-    st.sidebar.success(f"Predicted Loss: ${predicted}M")
-    st.sidebar.caption("This is a mock formula for demo only. Backend will return real model output.")
+    severity_map = {
+        "Auto (fill baseline)": None,
+        "Low": 1,
+        "Medium": 2,
+        "High": 3,
+        "Critical": 4,
+    }
+    def _to_float(val):
+        try:
+            return float(val)
+        except Exception:
+            return None
+
+    payload = [{
+        "Industry": in_industry,
+        "Year": int(in_year) if str(in_year).strip() else None,
+        "Attack_Type": in_attack,
+        "Data_Type": in_data_type or None,
+        "Records_Compromised": float(in_records),
+        "Employee_Count": float(in_emp) if in_emp else None,
+        "Security_Budget_Million_USD": _to_float(in_budget) if in_budget.strip() else None,
+        "Incident_Severity": severity_map.get(in_severity),
+        "Recovery_Time_Days": _to_float(in_recovery) if in_recovery.strip() else None,
+        "Country": in_country.strip() or None,
+        "Baseline_Industry_Cost_Million_USD": None,
+        "Canonical_Attack_Vector": None,
+    }]
+    try:
+        resp = requests.post(API_URL, json=payload, timeout=10)
+        resp.raise_for_status()
+        preds = resp.json()
+        if preds:
+            st.sidebar.success(f"Predicted Loss: ${preds[0]['prediction_musd']:.2f}M")
+            if preds[0].get("fields_filled"):
+                st.sidebar.caption(f"Filled from baselines: {', '.join(preds[0]['fields_filled'])}")
+    except Exception:
+        # Fallback to deterministic mock if API unavailable
+        base = 4.44
+        industry_multiplier = {
+            "Healthcare": 2.0,
+            "Finance": 1.5,
+            "Technology":1.2,
+            "Retail":0.9,
+            "Public":0.8
+        }.get(in_industry, 1.0)
+        sev_key = in_severity if in_severity != "Auto (fill baseline)" else "Medium"
+        severity_multiplier = {"Low":0.5,"Medium":1.0,"High":1.8,"Critical":3.0}.get(sev_key,1.0)
+        emp_factor = (float(in_emp or 0) / 1000 + 1e-6) ** 0.5
+        predicted = round(base * industry_multiplier * severity_multiplier * emp_factor, 2)
+        st.sidebar.warning("API unavailable; showing mock estimate")
+        st.sidebar.success(f"Predicted Loss: ${predicted}M")
 
 # --- Data filtering ---
 df_view = df.copy()
@@ -127,4 +173,4 @@ with right:
         st.write("No vulnerabilities available for selection")
 
 st.markdown("---")
-st.caption("Notes: This dashboard reads `data/processed/enriched.csv` by default. If it is missing, a small sample dataset is used so we can demo visuals immediately.")
+st.caption("Notes: Dashboard reads `data/processed/combined_enriched_core.csv` or falls back to a sample dataset. Predictions call the FastAPI backend when `API_URL` is reachable.")

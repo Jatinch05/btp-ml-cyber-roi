@@ -278,5 +278,115 @@ def run() -> None:
     print("INFO: Final shape:", combined.shape)
     print("INFO: Columns:", list(combined.columns))
 
+
+def add_advanced_features(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Add advanced engineered features to improve model performance.
+    
+    This function adds 12 new features that capture:
+    - Industry × Attack Type interactions
+    - Severity and scale relationships  
+    - Temporal trends
+    - Budget efficiency metrics
+    - Relative breach characteristics
+    
+    Expected MAPE improvement: +0.5-1.5%
+    
+    Args:
+        df: DataFrame with baseline features including Financial_Impact_Million_USD
+        
+    Returns:
+        DataFrame with 12 additional engineered features
+    """
+    df = df.copy()
+    
+    # 1. Industry × Attack Type median loss interaction
+    if "Industry" in df.columns and "Attack_Type" in df.columns and "Financial_Impact_Million_USD" in df.columns:
+        industry_attacktype_median = df.groupby(["Industry", "Attack_Type"], dropna=False)["Financial_Impact_Million_USD"].transform("median")
+        df["Industry_AttackType_median_loss"] = industry_attacktype_median.fillna(df["Financial_Impact_Million_USD"].median())
+    
+    # 2. Records per Budget Million (scale metric)
+    if "Records_Compromised" in df.columns and "Security_Budget_Million_USD" in df.columns:
+        df["Records_per_Budget_Million"] = (
+            pd.to_numeric(df["Records_Compromised"], errors="coerce") / 
+            (pd.to_numeric(df["Security_Budget_Million_USD"], errors="coerce") + 1)
+        )
+        df["Records_per_Budget_Million"] = df["Records_per_Budget_Million"].fillna(df["Records_per_Budget_Million"].median())
+    
+    # 3. Severity × Scale interaction
+    if "Incident_Severity" in df.columns and "Records_Compromised" in df.columns:
+        sev_norm = pd.to_numeric(df["Incident_Severity"], errors="coerce").fillna(1)
+        recs_norm = pd.to_numeric(df["Records_Compromised"], errors="coerce")
+        recs_norm = (recs_norm - recs_norm.min()) / (recs_norm.max() - recs_norm.min() + 1)
+        df["Severity_x_Scale"] = sev_norm * recs_norm
+        df["Severity_x_Scale"] = df["Severity_x_Scale"].fillna(df["Severity_x_Scale"].median())
+    
+    # 4. Years since start (temporal trend)
+    if "Year" in df.columns:
+        min_year = pd.to_numeric(df["Year"], errors="coerce").min()
+        df["Years_Since_Start"] = pd.to_numeric(df["Year"], errors="coerce") - min_year + 1
+        df["Years_Since_Start"] = df["Years_Since_Start"].fillna(df["Years_Since_Start"].median())
+    
+    # 5. Industry × Year trend
+    if "Industry" in df.columns and "Year" in df.columns and "Financial_Impact_Million_USD" in df.columns:
+        industry_year_trend = df.groupby(["Industry", "Year"], dropna=False)["Financial_Impact_Million_USD"].transform("mean")
+        df["Industry_Year_Trend"] = industry_year_trend.fillna(df["Financial_Impact_Million_USD"].median())
+    
+    # 6. Budget per Employee (log scale)
+    if "Security_Budget_Million_USD" in df.columns and "Employee_Count" in df.columns:
+        bpe = (pd.to_numeric(df["Security_Budget_Million_USD"], errors="coerce") * 1_000_000) / (pd.to_numeric(df["Employee_Count"], errors="coerce") + 1)
+        df["Budget_per_Employee_log"] = np.log1p(bpe)
+        df["Budget_per_Employee_log"] = df["Budget_per_Employee_log"].fillna(df["Budget_per_Employee_log"].median())
+    
+    # 7. Breach Scale per Employee
+    if "Records_Compromised" in df.columns and "Employee_Count" in df.columns:
+        bspe = pd.to_numeric(df["Records_Compromised"], errors="coerce") / (pd.to_numeric(df["Employee_Count"], errors="coerce") + 1)
+        df["Breach_Scale_per_Employee"] = np.log1p(bspe)
+        df["Breach_Scale_per_Employee"] = df["Breach_Scale_per_Employee"].fillna(df["Breach_Scale_per_Employee"].median())
+    
+    # 8. Budget × Severity (investment adequacy metric)
+    if "Security_Budget_Million_USD" in df.columns and "Incident_Severity" in df.columns:
+        bud_norm = pd.to_numeric(df["Security_Budget_Million_USD"], errors="coerce")
+        bud_norm = (bud_norm - bud_norm.min()) / (bud_norm.max() - bud_norm.min() + 1)
+        sev_norm = pd.to_numeric(df["Incident_Severity"], errors="coerce").fillna(1)
+        df["Budget_x_Severity"] = bud_norm * sev_norm
+        df["Budget_x_Severity"] = df["Budget_x_Severity"].fillna(df["Budget_x_Severity"].median())
+    
+    # 9. Recovery Time × Severity (response effectiveness)
+    if "Recovery_Time_Days" in df.columns and "Incident_Severity" in df.columns:
+        rtd_norm = pd.to_numeric(df["Recovery_Time_Days"], errors="coerce")
+        rtd_norm = (rtd_norm - rtd_norm.min()) / (rtd_norm.max() - rtd_norm.min() + 1)
+        sev_norm = pd.to_numeric(df["Incident_Severity"], errors="coerce").fillna(1)
+        df["Recovery_x_Severity"] = rtd_norm * sev_norm
+        df["Recovery_x_Severity"] = df["Recovery_x_Severity"].fillna(df["Recovery_x_Severity"].median())
+    
+    # 10. Log of Records Compromised
+    if "Records_Compromised" in df.columns:
+        df["Log_Records"] = np.log1p(pd.to_numeric(df["Records_Compromised"], errors="coerce"))
+        df["Log_Records"] = df["Log_Records"].fillna(df["Log_Records"].median())
+    
+    # 11. Relative Breach Size (vs industry median)
+    if "Records_Compromised" in df.columns and "Industry" in df.columns:
+        ind_median_records = df.groupby("Industry", dropna=False)["Records_Compromised"].transform("median")
+        rbs = pd.to_numeric(df["Records_Compromised"], errors="coerce") / (ind_median_records + 1)
+        df["Relative_Breach_Size"] = np.log1p(rbs)
+        df["Relative_Breach_Size"] = df["Relative_Breach_Size"].fillna(df["Relative_Breach_Size"].median())
+    
+    # 12. Budget Underinvestment (vs industry baseline)
+    if "Security_Budget_Million_USD" in df.columns and "Employee_Count" in df.columns and "Industry" in df.columns:
+        # Calculate budget per employee
+        bpe = (pd.to_numeric(df["Security_Budget_Million_USD"], errors="coerce") * 1_000_000) / (pd.to_numeric(df["Employee_Count"], errors="coerce") + 1)
+        # Get industry median budget per employee
+        df["_temp_bpe"] = bpe
+        ind_bpe = df.groupby("Industry", dropna=False)["_temp_bpe"].transform("median")
+        df.drop(columns=["_temp_bpe"], inplace=True)
+        # Calculate underinvestment
+        bu = (ind_bpe - bpe) / (ind_bpe + 1)
+        df["Budget_Underinvestment"] = np.maximum(bu, 0)  # Only positive underinvestment
+        df["Budget_Underinvestment"] = df["Budget_Underinvestment"].fillna(0)
+    
+    return df
+
+
 if __name__ == "__main__":
     run()

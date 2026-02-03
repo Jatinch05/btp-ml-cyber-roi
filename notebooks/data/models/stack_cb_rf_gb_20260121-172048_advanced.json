@@ -1,0 +1,61 @@
+{
+  "model_name": "stack_cb_rf_gb_20260121-172048_advanced",
+  "timestamp": "20260121-172048",
+  "model_type": "CatBoostRegressor (Advanced)",
+  "n_features": 11,
+  "n_advanced_features": 12,
+  "features": [
+    "Industry",
+    "Country",
+    "Year",
+    "Attack_Type",
+    "Data_Type",
+    "Records_Compromised",
+    "Employee_Count",
+    "Security_Budget_Million_USD",
+    "Recovery_Time_Days",
+    "Incident_Severity",
+    "Baseline_Industry_Cost_Million_USD"
+  ],
+  "advanced_features": [
+    "Industry_AttackType_median_loss",
+    "Records_per_Budget_Million",
+    "Severity_x_Scale",
+    "Years_Since_Start",
+    "Industry_Year_Trend",
+    "Budget_per_Employee_log",
+    "Breach_Scale_per_Employee",
+    "Budget_x_Severity",
+    "Recovery_x_Severity",
+    "Log_Records",
+    "Relative_Breach_Size",
+    "Budget_Underinvestment"
+  ],
+  "performance": {
+    "test_mape": 0.6047219220397535,
+    "test_r2": 0.3958864725971868,
+    "test_mae": 18.481622896653395
+  },
+  "baseline_comparison": {
+    "baseline_mape": 0.6047219220397535,
+    "baseline_r2": 0.3958864725971868,
+    "baseline_mae": 18.481622896653395,
+    "mape_improvement_pct": 0.0,
+    "r2_improvement_pct": 0.0,
+    "mae_improvement_pct": 0.0
+  },
+  "hyperparameters": {
+    "iterations": 1500,
+    "learning_rate": 0.05,
+    "depth": 8,
+    "loss_function": "RMSE",
+    "random_seed": 42
+  },
+  "data": {
+    "total_samples": 24200,
+    "train_samples": 19360,
+    "test_samples": 4840,
+    "target": "Financial_Impact_Million_USD",
+    "target_transform": "log1p"
+  }
+}
