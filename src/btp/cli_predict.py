@@ -2,6 +2,15 @@ import sys, json, pandas as pd
 from .infer import ImpactCatBoost
 
 def _read_stdin_df() -> pd.DataFrame:
+    """
+    Read JSON from stdin. Accepts:
+    - Single object: {"Industry": "Finance", "Year": 2024, ...}
+    - Array of objects: [{"Industry": "Finance", ...}, ...]
+    - JSONL (one JSON per line)
+    
+    Mandatory fields: Industry, Year, Attack_Type, Data_Type, Records_Compromised
+    Optional fields (auto-filled with baselines): Employee_Count, Security_Budget_Million_USD, Recovery_Time_Days, etc.
+    """
     buf = sys.stdin.read().strip()
     if not buf:
         raise SystemExit("no stdin input")
