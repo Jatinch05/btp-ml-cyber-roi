@@ -1,6 +1,7 @@
 from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List, Optional
+import re
 import numpy as np
 import pandas as pd
 import joblib
@@ -40,6 +41,16 @@ WINSOR_COLS = [
     "Budget_per_Employee", "Records_per_Employee",
 ]
 
+NUMERIC_INPUT_COLS = [
+    "Year",
+    "Records_Compromised",
+    "Employee_Count",
+    "Security_Budget_Million_USD",
+    "Recovery_Time_Days",
+    "Incident_Severity",
+    "Baseline_Industry_Cost_Million_USD",
+]
+
 # Hard defaults so baseline filling never returns None
 DEFAULT_BASELINES: Dict[str, object] = {
     "emp_by_ind": {"Healthcare": 1500, "Finance": 800, "Technology": 1200, "Retail": 400, "Public": 200, "Industrial": 500, "Education": 300},
@@ -54,6 +65,27 @@ DEFAULT_BASELINES: Dict[str, object] = {
 # Training data references to keep feature engineering deterministic at inference
 TRAIN_REF_PATH = DATA_DIR / "model_ready" / "combined_clean.csv"
 TRAIN_REF_SYN = DATA_DIR / "model_ready" / "synthetic_samples_ctgan_v2.csv"
+
+ACRONYM_MAP = {
+    "api": "API",
+    "ddos": "DDoS",
+    "iot": "IoT",
+    "ot": "OT",
+    "pii": "PII",
+    "phi": "PHI",
+    "ip": "IP",
+    "gps": "GPS",
+    "scada": "SCADA",
+    "pos": "POS",
+}
+
+
+def _normalize_category_key(value: object) -> str:
+    s = str(value).strip().lower()
+    # Treat underscores, commas, plus, and hyphens as separators.
+    s = re.sub(r"[_+,\-]", " ", s)
+    s = re.sub(r"\s+", " ", s)
+    return s.strip()
 
 def _winsorize(s: pd.Series, p: float = 0.005) -> pd.Series:
     if s.dropna().empty:
@@ -111,6 +143,11 @@ def _fill_optional_fields(df: pd.DataFrame, baselines: dict) -> pd.DataFrame:
     """Fill optional fields using industry baselines and IBM/DBIR-style anchors."""
     df = df.copy()
     eps = 1e-9
+
+    # Defensive coercion: incoming request payloads can still carry numeric-like strings.
+    for c in NUMERIC_INPUT_COLS:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
     
     # Fill Employee_Count (high friction field)
     if "Employee_Count" in df.columns:
@@ -217,6 +254,14 @@ def _load_training_reference() -> dict:
         }
         stats["industry_attack_median"] = df.groupby(["Industry", "Attack_Type"], dropna=False)["Financial_Impact_Million_USD"].median().to_dict()
         stats["industry_year_mean"] = df.groupby(["Industry", "Year"], dropna=False)["Financial_Impact_Million_USD"].mean().to_dict()
+
+        # Canonical vocab from training data to map readable UI labels back to raw model categories.
+        atk_vocab = sorted({str(v).strip() for v in df.get("Attack_Type", pd.Series(dtype=object)).dropna().tolist() if str(v).strip()})
+        dt_vocab = sorted({str(v).strip() for v in df.get("Data_Type", pd.Series(dtype=object)).dropna().tolist() if str(v).strip()})
+        stats["attack_type_vocab"] = atk_vocab
+        stats["data_type_vocab"] = dt_vocab
+        stats["attack_type_keymap"] = {_normalize_category_key(v): v for v in atk_vocab}
+        stats["data_type_keymap"] = {_normalize_category_key(v): v for v in dt_vocab}
         return stats
     except Exception as e:
         print(f"WARNING: Training reference load failed: {e}. Using empty stats.")
@@ -225,6 +270,10 @@ def _load_training_reference() -> dict:
             "median_loss": 1.0,
             "industry_attack_median": {},
             "industry_year_mean": {},
+            "attack_type_vocab": [],
+            "data_type_vocab": [],
+            "attack_type_keymap": {},
+            "data_type_keymap": {},
         }
 
 
@@ -274,9 +323,32 @@ def engineer_features(df: pd.DataFrame, stats: dict) -> pd.DataFrame:
 
     return X
 
+
+def _canonicalize_categoricals(df: pd.DataFrame, stats: dict) -> pd.DataFrame:
+    X = df.copy()
+    atk_map = stats.get("attack_type_keymap", {}) or {}
+    dt_map = stats.get("data_type_keymap", {}) or {}
+
+    if "Attack_Type" in X.columns:
+        X["Attack_Type"] = X["Attack_Type"].astype(str).map(
+            lambda v: atk_map.get(_normalize_category_key(v), str(v).strip())
+        )
+
+    if "Data_Type" in X.columns:
+        X["Data_Type"] = X["Data_Type"].astype(str).map(
+            lambda v: dt_map.get(_normalize_category_key(v), str(v).strip())
+        )
+
+    return X
+
 def preprocess(raw: pd.DataFrame, baselines: Optional[dict] = None, stats: Optional[dict] = None) -> pd.DataFrame:
     """Mirror training: baseline fill, leakage drop, impute, ratios, engineered feats."""
     df = raw.copy()
+
+    # Defensive coercion before any arithmetic / comparisons.
+    for c in NUMERIC_INPUT_COLS:
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce")
 
     # Fill optional fields with baselines first (before other imputations)
     df = _fill_optional_fields(df, baselines or DEFAULT_BASELINES)
@@ -291,7 +363,7 @@ def preprocess(raw: pd.DataFrame, baselines: Optional[dict] = None, stats: Optio
         df = df.drop(columns=drop_now, errors="ignore")
 
     # numeric then categorical impute (median / mode)
-    num_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    num_cols = sorted(set(df.select_dtypes(include=[np.number]).columns.tolist() + [c for c in NUMERIC_INPUT_COLS if c in df.columns]))
     for c in num_cols:
         df[c] = pd.to_numeric(df[c], errors="coerce").fillna(df[c].median())
     cat_cols = [c for c in df.columns if c not in num_cols]
@@ -313,7 +385,9 @@ def preprocess(raw: pd.DataFrame, baselines: Optional[dict] = None, stats: Optio
             df[c] = _winsorize(pd.to_numeric(df[c], errors="coerce"))
 
     # engineered features to match notebook
-    df = engineer_features(df, stats or TRAIN_STATS)
+    effective_stats = stats or TRAIN_STATS
+    df = _canonicalize_categoricals(df, effective_stats)
+    df = engineer_features(df, effective_stats)
 
     return df
 
