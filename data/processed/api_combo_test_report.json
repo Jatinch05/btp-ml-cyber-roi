@@ -1,0 +1,16 @@
+{
+  "endpoint": "http://127.0.0.1:8000/predict",
+  "dataset": "data\\model_ready\\combined_clean.csv",
+  "mode": "both",
+  "totals": {
+    "raw": 14500,
+    "readable": 14500
+  },
+  "successes": {
+    "raw": 14500,
+    "readable": 14500
+  },
+  "failures_count": 0,
+  "elapsed_sec": 1392.4,
+  "failures": []
+}
