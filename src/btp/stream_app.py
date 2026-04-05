@@ -20,6 +20,7 @@ REAL_DATA_PATH = ROOT / "data" / "model_ready" / "combined_clean.csv"
 SYN_DATA_PATH = ROOT / "data" / "model_ready" / "synthetic_samples_ctgan_v2.csv"
 COMBINED_EXPORT_PATH = ROOT / "data" / "processed" / "combined_generated_frontend.csv"
 API_URL = os.getenv("API_URL", "http://localhost:8000/predict")
+RECOMMEND_API_URL = os.getenv("RECOMMEND_API_URL", "http://localhost:8000/recommend-controls")
 st.title("Cyber Risk & ROI Dashboard — BTP (Prototype)")
 
 # --- helper: load notebook-aligned analytics dataset ---
@@ -67,6 +68,44 @@ ACRONYM_MAP = {
     "pos": "POS",
 }
 
+# Niche/domain-specific categories hidden from frontend dropdowns.
+ATTACK_TYPE_EXCLUDED = {
+    "Claims_Fraud",
+    "Connected_Car",
+    "Content_Piracy",
+    "Gaming_Hack",
+    "Passenger_Data",
+    "Payment_Fraud",
+    "Precision_Ag",
+    "Property_Fraud",
+    "Research_Theft",
+    "Wallet_Hack",
+}
+
+# Niche / low-signal composite data types hidden from frontend dropdowns.
+DATA_TYPE_EXCLUDED = {
+    "Call_Records,PII",
+    "Citizen_Data,Sensor_Data",
+    "Content,Subscriber_Data",
+    "Cryptocurrency",
+    "Farm_Data,GPS_Coordinates",
+    "Financial,Property_Data",
+    "Financial,Transaction_Data",
+    "Gaming_Data,PII",
+    "Legal_Documents,PII",
+    "Location_Data,PII",
+    "PHI,Device_Data",
+    "PII,Academic_Records",
+    "PII,Business_Data",
+    "PII,Claims_Data",
+    "PII,Messages",
+    "PII,Travel_Data",
+    "Research_Data,IP",
+    "SCADA_Data,Grid_Info",
+    "Trade_Secrets,Designs",
+    "Vehicle_Data,Location",
+}
+
 
 def _normalize_token(text: str) -> str:
     t = text.strip().replace("_", " ").replace("-", " ")
@@ -84,7 +123,7 @@ def _normalize_label(value: object) -> str:
         return s
     if "," in s:
         parts = [_normalize_token(p) for p in s.split(",") if p.strip()]
-        return " + ".join(parts)
+        return ", ".join(parts)
     return _normalize_token(s)
 
 
@@ -97,20 +136,112 @@ def _build_display_maps(values: list[str]) -> tuple[list[str], dict[str, str]]:
     display_values = sorted(display_to_raw.keys())
     return display_values, display_to_raw
 
+
+def _generalize_data_type(raw: str) -> str:
+    tokens = [t.strip().lower() for t in raw.split(",") if t.strip()]
+    joined = " ".join(tokens)
+
+    if any(k in joined for k in ["payment", "financial", "transaction", "claims"]):
+        return "Financial Data"
+    if any(k in joined for k in ["phi", "health", "medical"]):
+        return "Health Data"
+    if any(k in joined for k in ["location", "gps", "travel", "vehicle", "passenger"]):
+        return "Location and Mobility Data"
+    if any(k in joined for k in ["scada", "grid", "sensor", "farm", "device"]):
+        return "Operational and Device Data"
+    if any(k in joined for k in ["ip", "trade", "research", "design", "content", "subscriber", "legal", "business"]):
+        return "Business and Intellectual Property Data"
+    if any(k in joined for k in ["crypto", "wallet", "cryptocurrency"]):
+        return "Digital Asset Data"
+    if any(k in joined for k in ["pii", "customer", "call records", "citizen", "messages", "academic"]):
+        return "Personal Data"
+    return "General Sensitive Data"
+
+
+def _build_general_data_type_maps(values: list[str], series: pd.Series) -> tuple[list[str], dict[str, str]]:
+    # Pick a representative raw category per generalized bucket based on frequency.
+    counts = series.astype(str).str.strip().value_counts()
+    general_to_raw: dict[str, str] = {}
+    for raw in values:
+        label = _generalize_data_type(raw)
+        if label not in general_to_raw:
+            general_to_raw[label] = raw
+            continue
+        prev = general_to_raw[label]
+        if int(counts.get(raw, 0)) > int(counts.get(prev, 0)):
+            general_to_raw[label] = raw
+    labels = sorted(general_to_raw.keys())
+    return labels, general_to_raw
+
+
+def _summarize_data_type_categories(series: pd.Series, top_n: int = 3) -> pd.DataFrame:
+    generalized = series.astype(str).str.strip().map(_generalize_data_type)
+    counts = (
+        generalized
+        .value_counts(dropna=False)
+        .rename_axis("Data Type Category")
+        .reset_index(name="count")
+    )
+    total = int(counts["count"].sum()) if not counts.empty else 0
+
+    if counts.empty:
+        return counts
+
+    if len(counts) > top_n:
+        top = counts.head(top_n).copy()
+        other_count = int(counts["count"].iloc[top_n:].sum())
+        top = pd.concat(
+            [
+                top,
+                pd.DataFrame([{"Data Type Category": "Other", "count": other_count}]),
+            ],
+            ignore_index=True,
+        )
+    else:
+        top = counts.copy()
+
+    count_num = pd.to_numeric(top["count"], errors="coerce").fillna(0.0)
+    top["share_pct"] = (count_num / float(max(total, 1)) * 100.0).round(1)
+    return top
+
+
+def _size_from_employee_count(emp: float) -> str:
+    if emp <= 0:
+        return "medium"
+    if emp < 200:
+        return "small"
+    if emp > 1500:
+        return "large"
+    return "medium"
+
 # --- Sidebar: filters and prediction input ---
 st.sidebar.header("Controls & Predict")
 industry_options = ["All"] + sorted(df["Industry"].unique().tolist())
-attack_raw_values = sorted(df["Attack_Type"].dropna().astype(str).str.strip().unique().tolist())
+attack_raw_all = sorted(df["Attack_Type"].dropna().astype(str).str.strip().unique().tolist())
+attack_raw_values = [a for a in attack_raw_all if a not in ATTACK_TYPE_EXCLUDED]
+# Safety fallback in case filtering removes everything.
+if not attack_raw_values:
+    attack_raw_values = attack_raw_all
+
 attack_display_values, attack_display_to_raw = _build_display_maps(attack_raw_values)
-attack_options = ["All"] + attack_display_values
+attack_other_raw = "Phishing"
+if attack_raw_values:
+    attack_counts = df["Attack_Type"].astype(str).str.strip().value_counts()
+    attack_other_raw = max(attack_raw_values, key=lambda v: int(attack_counts.get(v, 0)))
+attack_options = ["All"] + attack_display_values + ["Other"]
+data_type_all: list[str] = []
 if "Data_Type" in df.columns:
-    data_type_values = sorted(
+    data_type_all = sorted(
         {
             str(v).strip()
             for v in df["Data_Type"].dropna().tolist()
             if str(v).strip()
         }
     )
+    data_type_values = [d for d in data_type_all if d not in DATA_TYPE_EXCLUDED]
+    # Safety fallback in case filtering removes everything.
+    if not data_type_values:
+        data_type_values = data_type_all
 else:
     data_type_values = []
 
@@ -123,17 +254,31 @@ if not data_type_values:
         "Intellectual Property",
     ]
 
-data_type_display_values, data_type_display_to_raw = _build_display_maps(data_type_values)
-data_type_options = ["Select Data Type"] + data_type_display_values
+if "Data_Type" in df.columns and data_type_values:
+    data_type_display_values, data_type_display_to_raw = _build_general_data_type_maps(
+        data_type_values,
+        df["Data_Type"],
+    )
+else:
+    data_type_display_values, data_type_display_to_raw = _build_display_maps(data_type_values)
+
+data_type_other_raw = "pii_customer"
+if data_type_values:
+    data_counts = df["Data_Type"].astype(str).str.strip().value_counts()
+    data_type_other_raw = max(data_type_values, key=lambda v: int(data_counts.get(v, 0)))
+
+data_type_options = ["Select Data Type"] + data_type_display_values + ["Other"]
+data_type_filter_options = ["All"] + data_type_display_values + ["Other"]
 selected_industry = st.sidebar.selectbox("Industry", industry_options, index=0)
-selected_attack = st.sidebar.selectbox("Attack Type", attack_options, index=0)
+selected_attack = st.sidebar.selectbox("Vulnerability Type", attack_options, index=0)
+selected_data_type = st.sidebar.selectbox("Data Type", data_type_filter_options, index=0)
 
 # Prediction form (calls backend; optional fields can be left blank)
 st.sidebar.markdown("---")
 st.sidebar.subheader("Predict (API)")
 with st.sidebar.form("predict_form"):
     in_industry = st.selectbox("Industry (required)", industry_options[1:] if len(industry_options)>1 else ["Finance"])
-    in_attack = st.selectbox("Attack Type (required)", attack_options[1:] if len(attack_options)>1 else ["Phishing"])
+    in_attack = st.selectbox("Vulnerability Type (required)", attack_options[1:] if len(attack_options)>1 else ["Phishing"])
     in_data_type = st.selectbox("Data Type (required)", data_type_options, index=0)
     in_emp = st.number_input("Employee count (optional)", min_value=0, value=0, step=1)
     in_records = st.number_input("Records Compromised (required)", min_value=1, value=1)
@@ -160,6 +305,15 @@ if submitted:
     missing = []
     year_txt = str(in_year).strip()
     data_type_txt = str(in_data_type).strip()
+    if data_type_txt == "Other":
+        data_type_raw = data_type_other_raw
+    else:
+        data_type_raw = data_type_display_to_raw.get(data_type_txt, data_type_txt)
+
+    if in_attack == "Other":
+        attack_type_raw = attack_other_raw
+    else:
+        attack_type_raw = attack_display_to_raw.get(in_attack, in_attack)
 
     if not year_txt:
         missing.append("Year")
@@ -180,8 +334,8 @@ if submitted:
                 "Industry": in_industry,
                 "Year": year_val,
                 # Send readable labels; backend canonicalizes to model categories.
-                "Attack_Type": in_attack,
-                "Data_Type": data_type_txt,
+                "Attack_Type": attack_type_raw,
+                "Data_Type": data_type_raw,
                 "Records_Compromised": float(in_records),
                 "Employee_Count": float(in_emp) if in_emp else None,
                 "Security_Budget_Million_USD": _to_float(in_budget) if in_budget.strip() else None,
@@ -200,6 +354,23 @@ if submitted:
                     st.sidebar.success(f"Predicted Loss: ${preds[0]['prediction_musd']:.2f}M")
                     if preds[0].get("fields_filled"):
                         st.sidebar.caption(f"Filled from baselines: {', '.join(preds[0]['fields_filled'])}")
+
+                    # Mitigation + ROI recommendation workflow.
+                    try:
+                        pred_musd = float(preds[0]["prediction_musd"])
+                        rec_payload = {
+                            "attack_type": in_attack,
+                            "predicted_loss_usd": pred_musd * 1_000_000.0,
+                            "industry": in_industry,
+                            "company_size": _size_from_employee_count(float(in_emp or 0)),
+                            "employee_count": float(in_emp or 0),
+                            "device_count": float(in_emp or 0),
+                        }
+                        rec_resp = requests.post(RECOMMEND_API_URL, json=rec_payload, timeout=10)
+                        rec_resp.raise_for_status()
+                        st.session_state["last_recommendation"] = rec_resp.json()
+                    except Exception as rec_err:
+                        st.sidebar.warning(f"Recommendation service unavailable: {rec_err}")
             except requests.exceptions.ConnectionError:
                 # Fallback to deterministic mock if API is truly unreachable
                 base = 4.44
@@ -226,13 +397,46 @@ if submitted:
             except Exception as e:
                 st.sidebar.error(f"Unexpected prediction error: {e}")
 
+if st.session_state.get("last_recommendation"):
+    rec = st.session_state["last_recommendation"]
+    st.markdown("---")
+    st.subheader("Recommended Security Controls")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Mapped Vulnerability", rec.get("mapped_vulnerability", "n/a"))
+    c2.metric("Projected Loss After Controls", f"${rec.get('loss_after', 0):,.0f}")
+    c3.metric("Portfolio ROSI", f"{rec.get('rosi', 0):.2f}" if rec.get("rosi") is not None else "n/a")
+
+    rec_items = rec.get("recommendations", [])
+    if rec_items:
+        rec_df = pd.DataFrame(rec_items)
+        show_cols = [
+            c for c in [
+                "control", "tool_examples", "control_type", "effort", "cost",
+                "risk_reduction", "loss_after", "rosi", "priority"
+            ] if c in rec_df.columns
+        ]
+        st.dataframe(rec_df[show_cols].head(8), use_container_width=True)
+
 # --- Data filtering ---
 df_view = df.copy()
 if selected_industry != "All":
     df_view = df_view[df_view["Industry"] == selected_industry]
 if selected_attack != "All":
-    selected_attack_raw = attack_display_to_raw.get(selected_attack, selected_attack)
-    df_view = df_view[df_view["Attack_Type"] == selected_attack_raw]
+    if selected_attack == "Other":
+        excluded_attack_raw = [a for a in attack_raw_all if a in ATTACK_TYPE_EXCLUDED]
+        df_view = df_view[df_view["Attack_Type"].isin(excluded_attack_raw)]
+    else:
+        selected_attack_raw = attack_display_to_raw.get(selected_attack, selected_attack)
+        df_view = df_view[df_view["Attack_Type"] == selected_attack_raw]
+if "Data_Type" in df_view.columns and selected_data_type != "All":
+    if selected_data_type == "Other":
+        excluded_data_raw = [d for d in data_type_all if d in DATA_TYPE_EXCLUDED]
+        df_view = df_view[df_view["Data_Type"].isin(excluded_data_raw)]
+    else:
+        # When using generalized labels, filter by generalized category for full coverage.
+        data_type_series = df_view["Data_Type"].astype(str).str.strip()
+        generalized = data_type_series.map(_generalize_data_type)
+        df_view = df_view[generalized == selected_data_type]
 
 # --- KPIs row ---
 avg_loss = df_view[loss_col].mean()
@@ -268,7 +472,7 @@ with left:
         st.info("No recovery-time data to plot")
 
 with right:
-    st.subheader("Attack Type Distribution")
+    st.subheader("Vulnerability Type Distribution")
     attack_counts = (
         df_view["Attack_Type"]
         .astype(str)
@@ -294,28 +498,36 @@ with right:
 
         attack_plot = attack_plot.copy()
         attack_plot["Attack_Type_Display"] = attack_plot["Attack_Type"].map(_normalize_label)
-        fig3 = px.pie(attack_plot, names="Attack_Type_Display", values="count", title="Attack Type Share")
+        fig3 = px.pie(attack_plot, names="Attack_Type_Display", values="count", title="Vulnerability Type Share")
         fig3.update_traces(textposition="inside", textinfo="percent")
-        fig3.update_layout(legend_title_text="Attack Type")
+        fig3.update_layout(legend_title_text="Vulnerability Type")
         st.plotly_chart(fig3, width='stretch')
     else:
         st.info("No data to plot")
 
     table_col = vuln_col if vuln_col else "Data_Type"
-    st.subheader(f"Top {table_col.replace('_', ' ')}")
-    vuln_counts = (
-        df_view[table_col]
-        .astype(str)
-        .value_counts(dropna=False)
-        .rename_axis(table_col)
-        .reset_index(name="count")
-    )
-    if not vuln_counts.empty:
-        top_vals = vuln_counts.head(8).copy()
-        top_vals[table_col] = top_vals[table_col].map(_normalize_label)
-        st.table(top_vals)
+    if table_col == "Data_Type":
+        st.subheader("Top Data Type Categories")
+        top_vals = _summarize_data_type_categories(df_view[table_col], top_n=3)
+        if not top_vals.empty:
+            st.table(top_vals)
+        else:
+            st.write("No values available for selection")
     else:
-        st.write("No values available for selection")
+        st.subheader(f"Top {table_col.replace('_', ' ')}")
+        vuln_counts = (
+            df_view[table_col]
+            .astype(str)
+            .value_counts(dropna=False)
+            .rename_axis(table_col)
+            .reset_index(name="count")
+        )
+        if not vuln_counts.empty:
+            top_vals = vuln_counts.head(8).copy()
+            top_vals[table_col] = top_vals[table_col].map(_normalize_label)
+            st.table(top_vals)
+        else:
+            st.write("No values available for selection")
 
 st.markdown("---")
 st.caption(

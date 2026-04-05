@@ -1,3 +1,11 @@
 .venv/*
 .venv310/*
 __pycache__/
+
+# Python caches
+*.py[cod]
+.pytest_cache/
+
+# Frontend artifacts
+webapp/node_modules/
+webapp/dist/

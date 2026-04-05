@@ -1,0 +1,25 @@
+vulnerability,control,tool_examples,cost_min,cost_max,cost_unit,cost_scaling_type,effectiveness_min,effectiveness_max,real_world_factor,mitigatable_fraction,control_type,scope,max_effect_cap,effort
+API Abuse,Rate Limiting,"NGINX, Cloudflare",0,20,monthly,per_traffic,0.6,0.85,0.75,0.6,Preventive,application,0.4,Low
+API Abuse,API Gateway,"AWS API Gateway, Kong",50,300,monthly,per_request,0.7,0.9,0.7,0.65,Preventive,application,0.5,Medium
+Account Takeover,MFA,"Auth0, Google Auth",2,6,per_user_month,per_user,0.8,0.95,0.8,0.7,Preventive,identity,0.6,Low
+Account Takeover,Bot Detection,"Cloudflare Bot Mgmt",50,300,monthly,per_traffic,0.7,0.9,0.7,0.6,Preventive,application,0.4,Medium
+App Vulnerability,SAST,SonarQube,0,150,monthly,flat,0.6,0.8,0.7,0.5,Preventive,application,0.4,Medium
+App Vulnerability,DAST,"OWASP ZAP, Burp",0,400,monthly,flat,0.65,0.85,0.7,0.5,Detective,application,0.3,Medium
+DDoS,DDoS Protection,"Cloudflare, AWS Shield",100,1000,monthly,per_traffic,0.85,0.99,0.8,0.7,Preventive,network,0.6,Low
+Data Breach,DLP,"Microsoft Purview, Symantec",5,20,per_user_month,per_user,0.6,0.85,0.7,0.6,Detective,data,0.4,High
+Data Exposure,Encryption,"TLS, AES",0,50,monthly,flat,0.7,0.95,0.9,0.7,Preventive,data,0.6,Low
+Email Compromise,Email Security,"Proofpoint, Google Workspace",3,10,per_user_month,per_user,0.7,0.9,0.75,0.6,Preventive,email,0.5,Low
+Industrial Espionage,EDR,"CrowdStrike, Defender",5,20,per_device_month,per_device,0.7,0.9,0.75,0.6,Detective,endpoint,0.5,Medium
+Insider Threat,UEBA,"Splunk, Exabeam",200,2000,monthly,per_log_volume,0.5,0.75,0.6,0.5,Detective,identity,0.3,High
+IoT Breach,Network Segmentation,"Zero Trust, VLAN",50,300,monthly,per_network,0.6,0.85,0.7,0.6,Preventive,network,0.5,Medium
+Malware,EDR/Antivirus,"Defender, CrowdStrike",5,25,per_device_month,per_device,0.7,0.95,0.8,0.65,Preventive,endpoint,0.6,Low
+MITM,HTTPS + HSTS,TLS,0,20,monthly,flat,0.8,0.95,0.9,0.7,Preventive,network,0.6,Low
+Network Breach,Firewall,"pfSense, Palo Alto",100,2000,monthly,per_network,0.7,0.9,0.75,0.65,Preventive,network,0.6,Medium
+OT Attack,ICS Monitoring,"Dragos, Nozomi",1000,10000,monthly,per_site,0.6,0.85,0.7,0.6,Detective,ot,0.4,High
+POS Malware,App Whitelisting,"Windows Defender App Control",5,20,per_device_month,per_device,0.7,0.9,0.75,0.6,Preventive,endpoint,0.5,Medium
+Phishing,Awareness Training,"KnowBe4",10,50,per_user_year,per_user,0.4,0.7,0.6,0.4,Human,email,0.3,Low
+Ransomware,Backup + EDR,"Veeam, Defender",20,200,monthly,per_device,0.8,0.95,0.8,0.7,Recovery,endpoint,0.6,Medium
+SQL Injection,Input Validation,"ORM",0,50,monthly,flat,0.8,0.95,0.85,0.7,Preventive,application,0.6,Low
+SQL Injection,WAF,"Cloudflare WAF",50,300,monthly,per_traffic,0.6,0.85,0.75,0.6,Preventive,application,0.5,Low
+Supply Chain,Dependency Scan,"Snyk, Dependabot",0,100,monthly,per_repo,0.6,0.8,0.7,0.5,Preventive,application,0.4,Low
+Other,SIEM,"Splunk, ELK",500,5000,monthly,per_log_volume,0.5,0.75,0.6,0.5,Detective,network,0.3,High

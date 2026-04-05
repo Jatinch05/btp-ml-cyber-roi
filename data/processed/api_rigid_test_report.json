@@ -1,0 +1,26 @@
+{
+  "summary": {
+    "base_url": "http://127.0.0.1:8000",
+    "dataset": "data\\model_ready\\combined_clean.csv",
+    "mode": "both",
+    "totals": {
+      "predict::raw": 14500,
+      "predict::readable": 14500,
+      "recommend::raw": 15660,
+      "recommend::readable": 15660,
+      "predict_recommend::raw": 14500,
+      "predict_recommend::readable": 14500
+    },
+    "passes": {
+      "predict::raw": 14500,
+      "predict::readable": 14500,
+      "recommend::raw": 15660,
+      "recommend::readable": 15660,
+      "predict_recommend::raw": 14500,
+      "predict_recommend::readable": 14500
+    },
+    "failures": 0,
+    "elapsed_sec": 3367.7
+  },
+  "failure_samples": []
+}
