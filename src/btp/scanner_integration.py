@@ -5,6 +5,7 @@ import difflib
 import hashlib
 import os
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,65 @@ try:
     import nvdlib  # type: ignore
 except Exception:  # pragma: no cover
     nvdlib = None
+
+# Maps bare service names to well-known product names for better NVD hits.
+SERVICE_PRODUCT_HINTS: dict[str, str] = {
+    "ssh": "OpenSSH",
+    "http": "Apache HTTP Server",
+    "https": "Apache HTTP Server",
+    "mysql": "MySQL",
+    "postgres": "PostgreSQL",
+    "mssql": "Microsoft SQL Server",
+    "rdp": "Microsoft Remote Desktop",
+    "ms-wbt-server": "Microsoft Remote Desktop",
+    "smb": "Samba",
+    "microsoft-ds": "Samba",
+    "telnet": "linux telnetd",
+    "ftp": "vsftpd",
+    "vnc": "RealVNC",
+    "dns": "ISC BIND",
+    "domain": "ISC BIND",
+    "smtp": "Postfix",
+    "imap": "Dovecot",
+    "pop3": "Dovecot",
+    "redis": "Redis",
+    "mongo": "MongoDB",
+    "ldap": "OpenLDAP",
+    "snmp": "Net-SNMP",
+    "exec": "netkit-rsh rexecd",
+    "login": "rlogind",
+    "shell": "rshd",
+    "java-rmi": "Java RMI",
+    "rmiregistry": "Java RMI",
+    "bindshell": "Metasploitable",
+    "nfs": "NFS",
+    "rpcbind": "rpcbind",
+    "tcpwrapped": "tcpwrapper",
+    "ajp13": "Apache Tomcat",
+    "x11": "X.Org X11",
+    "irc": "UnrealIRCd",
+    "distccd": "distcc",
+}
+
+# Tracks the timestamp of the last NVD API call for free-tier pacing.
+_last_nvd_call: float = 0.0
+_NVD_FREE_TIER_DELAY: float = 6.5  # seconds between calls without API key
+
+
+def _nvd_search_with_retry(max_retries: int = 3, **kwargs) -> list[Any]:
+    """Call nvdlib.searchCVE with exponential backoff on rate-limit errors."""
+    for attempt in range(max_retries):
+        try:
+            return list(nvdlib.searchCVE(**kwargs))
+        except Exception as exc:
+            msg = str(exc).lower()
+            if "403" in msg or "rate" in msg or "limit" in msg:
+                wait = 6 * (attempt + 1)
+                print(f"[NVD] Rate limited, waiting {wait}s (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait)
+            else:
+                raise
+    return []
 
 ROOT = Path(__file__).resolve().parents[2]
 SCANNER_DIR = ROOT / "src" / "btp" / "scanner"
@@ -154,7 +214,11 @@ def _extract_cvss_fields(cve: Any) -> tuple[float | None, str]:
     return cvss, severity
 
 
-def _build_nvd_query_candidates(product: str, version: str, cpe: str) -> list[str]:
+# Noise words to skip when splitting product names into fallback queries.
+_NOISE_WORDS = {"the", "a", "an", "for", "and", "or", "of", "in", "on", "to", "with", "is"}
+
+
+def _build_nvd_query_candidates(product: str, version: str, cpe: str, *, thorough: bool = False) -> list[str]:
     candidates: list[str] = []
 
     def add_candidate(value: str) -> None:
@@ -178,6 +242,16 @@ def _build_nvd_query_candidates(product: str, version: str, cpe: str) -> list[st
     if "coyote_http_connector" in lowered:
         add_candidate("coyote_http_connector")
         add_candidate("apache coyote_http_connector")
+    if "bind" in lowered:
+        add_candidate("ISC BIND")
+    if "rmi" in lowered or "grmi" in lowered:
+        add_candidate("Java RMI")
+        add_candidate("GNU Classpath")
+    if "rexec" in lowered or "netkit" in lowered:
+        add_candidate("netkit")
+        add_candidate("rexec")
+    if "metasploit" in lowered:
+        add_candidate("Metasploitable")
 
     cpe_text = cpe.strip()
     if cpe_text.startswith("cpe:/"):
@@ -186,55 +260,102 @@ def _build_nvd_query_candidates(product: str, version: str, cpe: str) -> list[st
             add_candidate(" ".join(cpe_parts[1:3]))
             add_candidate(" ".join(cpe_parts[1:4]))
 
+    # In thorough mode, also try significant individual words from the product name.
+    if thorough:
+        words = [w for w in product.replace("-", " ").replace("_", " ").split() if w.lower() not in _NOISE_WORDS and len(w) > 2]
+        for w in words:
+            add_candidate(w)
+
     return candidates
 
 
-def get_nvd_info(product: Any, version: Any = None, cpe: Any = None) -> dict[str, Any]:
+def get_nvd_info(product: Any, version: Any = None, cpe: Any = None, *, thorough: bool = True) -> dict[str, Any]:
     if nvdlib is None:
         print(f"[NVD] nvdlib not available, skipping lookup for {product}")
         return {"CVE": "N/A", "CVSS": None, "Severity": "Unknown", "CVE_Count": 0}
 
     product_str = str(product or "").strip()
-    if (not product_str or product_str.lower() in {"unknown", "none", "", "nan"}) and not cpe:
-        print(f"[NVD] Empty product and no CPE, skipping lookup")
-        return {"CVE": "N/A", "CVSS": None, "Severity": "Unknown", "CVE_Count": 0}
+    service_str = product_str  # keep original for hint lookup
+    if not product_str or product_str.lower() in {"unknown", "none", "", "nan"}:
+        hint = SERVICE_PRODUCT_HINTS.get(service_str.lower())
+        if hint:
+            print(f"[NVD] Bare service '{service_str}' -> product hint '{hint}'")
+            product_str = hint
+        elif not cpe:
+            print(f"[NVD] Empty product and no CPE, skipping lookup")
+            return {"CVE": "N/A", "CVSS": None, "Severity": "Unknown", "CVE_Count": 0}
+
+    cpe_limit = 10 if thorough else 5
+    kw_limit = 5 if thorough else 3
+    max_retries = 3 if thorough else 1
 
     try:
-        print(f"[NVD] Lookup attempt: product={product_str}, version={version}, cpe={cpe}")
+        print(f"[NVD] Lookup attempt: product={product_str}, version={version}, cpe={cpe}, thorough={thorough}")
         version_str = str(version or "").strip()
-        keyword = f"{product_str} {version_str}".strip()
         api_key = os.getenv("NVD_API_KEY", "").strip() or None
         if api_key:
             print(f"[NVD] Using NVD API key")
         else:
             print(f"[NVD] No API key; using free-tier (rate-limited)")
-        query_candidates = _build_nvd_query_candidates(product_str, version_str, str(cpe or ""))
+        query_candidates = _build_nvd_query_candidates(product_str, version_str, str(cpe or ""), thorough=thorough)
+        # In thorough mode, also try the bare service name as a fallback candidate
+        if thorough and service_str.lower() != product_str.lower():
+            bare = service_str.strip()
+            if bare and bare not in query_candidates:
+                query_candidates.append(bare)
+        # Also try a SERVICE_PRODUCT_HINTS lookup for the service name as fallback
+        if thorough:
+            hint = SERVICE_PRODUCT_HINTS.get(service_str.lower())
+            if hint and hint not in query_candidates:
+                query_candidates.append(hint)
         print(f"[NVD] Query candidates: {query_candidates}")
 
         result_by_id: dict[str, Any] = {}
 
+        def _pace_nvd_call() -> None:
+            """Enforce free-tier pacing when no API key is set."""
+            global _last_nvd_call
+            if not api_key:
+                elapsed = time.time() - _last_nvd_call
+                if elapsed < _NVD_FREE_TIER_DELAY:
+                    wait = _NVD_FREE_TIER_DELAY - elapsed
+                    print(f"[NVD] Pacing: waiting {wait:.1f}s for free-tier rate limit")
+                    time.sleep(wait)
+            _last_nvd_call = time.time()
+
         cpe_text = str(cpe or "").strip()
         if cpe_text.startswith("cpe:/"):
-            print(f"[NVD] Searching CPE: {cpe_text}")
-            cpe_kwargs = {"cpeName": cpe_text, "limit": 5}
-            if api_key:
-                cpe_kwargs["key"] = api_key
-                cpe_kwargs["delay"] = 1
-            for item in nvdlib.searchCVE(**cpe_kwargs):
-                if getattr(item, "id", None):
-                    result_by_id[item.id] = item
-            print(f"[NVD] CPE search found {len(result_by_id)} CVEs")
+            try:
+                print(f"[NVD] Searching CPE: {cpe_text}")
+                cpe_kwargs: dict[str, Any] = {"cpeName": cpe_text, "limit": cpe_limit}
+                if api_key:
+                    cpe_kwargs["key"] = api_key
+                    cpe_kwargs["delay"] = 1
+                _pace_nvd_call()
+                for item in _nvd_search_with_retry(max_retries=max_retries, **cpe_kwargs):
+                    if getattr(item, "id", None):
+                        result_by_id[item.id] = item
+                print(f"[NVD] CPE search found {len(result_by_id)} CVEs")
+            except Exception as cpe_exc:
+                print(f"[NVD] CPE search failed ({type(cpe_exc).__name__}: {cpe_exc}), continuing with keyword searches")
 
         for query in query_candidates:
             q = (query or "").strip()
             if not q:
                 continue
+            # In thorough mode keep searching until we find at least one; in fast mode stop at first hit
+            if not thorough and result_by_id:
+                break
+            # In thorough mode, once we have results, stop trying additional fallback words
+            if thorough and result_by_id and len(query_candidates) > 4 and query_candidates.index(q) >= 4:
+                break
             print(f"[NVD] Keyword search: {q}")
-            kw_kwargs = {"keywordSearch": q, "limit": 3}
+            kw_kwargs: dict[str, Any] = {"keywordSearch": q, "limit": kw_limit}
             if api_key:
                 kw_kwargs["key"] = api_key
                 kw_kwargs["delay"] = 1
-            results = nvdlib.searchCVE(**kw_kwargs)
+            _pace_nvd_call()
+            results = _nvd_search_with_retry(max_retries=max_retries, **kw_kwargs)
             for item in results:
                 if getattr(item, "id", None):
                     result_by_id[item.id] = item
@@ -343,24 +464,86 @@ def process_raw_scan(raw_results: list[dict[str, Any]]) -> pd.DataFrame:
     if "Service" not in df.columns:
         df["Service"] = "Unknown"
 
+    if "scan_mode" not in df.columns:
+        df["scan_mode"] = "thorough"
+
     df["Attack_Type"] = df["Service"].apply(service_to_attack)
     df["Security_Vulnerability_Type"] = df.apply(
         lambda row: normalize_vuln(row.get("Product") or row.get("Service")), axis=1
     )
 
-    nvd_cache: dict[tuple[str, str, str], dict[str, Any]] = {}
+    # In fast mode, enrich only the highest-risk half of unique findings.
+    # Risk is inferred from mapped attack type severity.
+    severity_rank = {
+        "CRITICAL": 4,
+        "HIGH": 3,
+        "MEDIUM": 2,
+        "LOW": 1,
+    }
 
-    def add_nvd(row: pd.Series) -> pd.Series:
+    def row_lookup_key(row: pd.Series) -> tuple[str, str, str]:
         query = str(row.get("Product") or row.get("Service") or "").strip().lower()
         version = str(row.get("Version") or "").strip().lower()
         cpe = str(row.get("CPE") or "").strip().lower()
-        key = (query, version, cpe)
+        return (query, version, cpe)
+
+    def row_risk_score(row: pd.Series) -> int:
+        attack_type = str(row.get("Attack_Type") or "Unknown")
+        sev = ATTACK_TYPE_SEVERITY_MAP.get(attack_type, "MEDIUM")
+        return severity_rank.get(sev, 2)
+
+    fast_mode_mask = df["scan_mode"].astype(str).str.lower().isin({"fast", "demo", "quick"})
+    fast_allowed_keys: set[tuple[str, str, str]] = set()
+    if fast_mode_mask.any():
+        fast_df = df.loc[fast_mode_mask].copy()
+        fast_df["_lookup_key"] = fast_df.apply(row_lookup_key, axis=1)
+        fast_df["_risk"] = fast_df.apply(row_risk_score, axis=1)
+
+        key_to_risk: dict[tuple[str, str, str], int] = {}
+        for _, row in fast_df.iterrows():
+            key = row["_lookup_key"]
+            if not any(key):
+                continue
+            risk = int(row["_risk"])
+            key_to_risk[key] = max(risk, key_to_risk.get(key, 0))
+
+        ranked_keys = sorted(key_to_risk.items(), key=lambda item: item[1], reverse=True)
+        # Include ALL High and Critical findings — no budget fraction so none are skipped.
+        # Medium/Low findings are excluded from NVD lookups in fast mode.
+        fast_allowed_keys = {key for key, risk in ranked_keys if risk >= severity_rank["HIGH"]}
+
+    nvd_cache: dict[tuple[str, str, str], dict[str, Any]] = {}
+
+    def add_nvd(row: pd.Series) -> pd.Series:
+        key = row_lookup_key(row)
+
+        mode = str(row.get("scan_mode") or "thorough").strip().lower()
+        is_fast_mode = mode in {"fast", "demo", "quick"}
+        row["NVD_Mode"] = "partial_high_critical" if is_fast_mode else "full"
+
+        should_lookup_nvd = not is_fast_mode or key in fast_allowed_keys
+
         if key not in nvd_cache:
-            nvd_cache[key] = get_nvd_info(row.get("Product") or row.get("Service"), row.get("Version"), row.get("CPE"))
+            if should_lookup_nvd:
+                nvd_cache[key] = get_nvd_info(
+                    row.get("Product") or row.get("Service"),
+                    row.get("Version"),
+                    row.get("CPE"),
+                    thorough=not is_fast_mode,
+                )
+            else:
+                nvd_cache[key] = {"CVE": "N/A", "CVSS": None, "Severity": "Unknown", "CVE_Count": 0}
+
         nvd = nvd_cache[key]
         row["CVE"] = nvd.get("CVE", "N/A")
         row["CVSS_Score"] = nvd.get("CVSS")
         row["NVD_Severity"] = nvd.get("Severity", "Unknown")
+
+        if is_fast_mode:
+            nvd_sev = str(row.get("NVD_Severity") or "Unknown").upper().strip()
+            if nvd_sev not in {"HIGH", "CRITICAL"}:
+                row["CVE"] = "N/A"
+                row["CVSS_Score"] = None
         
         attack_type = str(row.get("Attack_Type", "Unknown"))
         heuristic_severity = ATTACK_TYPE_SEVERITY_MAP.get(attack_type, "MEDIUM")

@@ -108,13 +108,13 @@ def print_readiness_result() -> bool:
 
 def choose_scan_mode() -> tuple[str, list[str]]:
     print("\nChoose scan mode:")
-    print("  1) Fast scan - common ports only, intended to finish quickly")
-    print("  2) Thorough scan - full port sweep with service detection")
+    print("  1) Fast demo scan - top ports with light detection and partial enrichment")
+    print("  2) Thorough scan - full port sweep with service detection and full enrichment")
 
     while True:
         choice = input("Select 1 or 2: ").strip().lower()
         if choice in {"1", "fast", "f"}:
-            return "fast", ["nmap", "-Pn", "-F", "-sV", "-T4", "--max-retries", "1"]
+            return "fast", ["nmap", "-Pn", "--open", "-T4", "--max-retries", "1"]
         if choice in {"2", "thorough", "t"}:
             return "thorough", ["nmap", "-Pn", "-sV", "-p-", "-T4"]
         print("Please enter 1 for fast scan or 2 for thorough scan.")
@@ -171,6 +171,7 @@ def main():
                 "Product": product,
                 "Version": version,
                 "CPE": cpe,
+                "scan_mode": mode_name,
                 "scan_timestamp": load_scan_timestamp()
             })
 
