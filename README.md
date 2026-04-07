@@ -79,8 +79,7 @@ Run Locally (Windows)
 Default URLs
 - Backend: http://127.0.0.1:8000
 - API docs: http://127.0.0.1:8000/docs
-- Original frontend: http://127.0.0.1:5173
-- New frontend: http://127.0.0.1:5174
+- Frontend: http://127.0.0.1:5174
 
 Environment Variables
 - Frontend API base URL (optional): VITE_API_BASE
