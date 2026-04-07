@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+pandas
+numpy
+python-multipart
+streamlit
+plotly
+requests
+nvdlib

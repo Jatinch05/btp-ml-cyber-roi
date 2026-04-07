@@ -1,16 +1,31 @@
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI
+from fastapi import HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 import pandas as pd
 from .infer import ImpactCatBoost
 from .mitigation import recommend_controls, estimate_company_size
+from .scanner_integration import (
+    agent_script_sha256,
+    agent_script_text,
+    latest_scan_results,
+    process_raw_scan,
+    scanner_readiness,
+    summarize_for_prefill,
+)
 
 app = FastAPI(title="Cyber Impact Inference API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:5174",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -109,6 +124,18 @@ class PredictAndRecommendOut(BaseModel):
     recommendation: RecommendationOut
 
 
+class ScannerReadinessOut(BaseModel):
+    ready: bool
+    checks: List[Dict[str, Any]]
+    instructions: List[str]
+
+
+class ScannerUploadOut(BaseModel):
+    status: str
+    data: List[Dict[str, Any]]
+    summary: Dict[str, Any]
+
+
 def _load_analytics_df() -> pd.DataFrame:
     if not MODEL_READY_REAL.exists():
         raise FileNotFoundError(f"Dataset not found: {MODEL_READY_REAL}")
@@ -117,6 +144,49 @@ def _load_analytics_df() -> pd.DataFrame:
         df_syn = pd.read_csv(MODEL_READY_SYN)
         return pd.concat([df_real, df_syn], ignore_index=True)
     return df_real
+
+
+@app.get("/scanner/readiness", response_model=ScannerReadinessOut)
+def scanner_readiness_endpoint():
+    return scanner_readiness()
+
+
+@app.get("/scanner/agent")
+def scanner_agent_download():
+    return PlainTextResponse(agent_script_text(), media_type="text/x-python")
+
+
+@app.get("/scanner/agent.sha256")
+def scanner_agent_checksum():
+    digest = agent_script_sha256()
+    content = f"{digest}  secure_scope_local_scanner.py\n"
+    return PlainTextResponse(content, media_type="text/plain")
+
+
+@app.post("/upload_raw_scan", response_model=ScannerUploadOut)
+@app.post("/scanner/upload_raw_scan", response_model=ScannerUploadOut)
+def scanner_upload_raw_scan(raw_results: List[Dict[str, Any]]):
+    if not raw_results:
+        raise HTTPException(status_code=400, detail="No scan results provided")
+    if len(raw_results) > 10000:
+        raise HTTPException(status_code=413, detail="Too many scan rows")
+    enriched = process_raw_scan(raw_results).fillna("")
+    rows = enriched.to_dict(orient="records")
+    return {
+        "status": "success",
+        "data": rows,
+        "summary": summarize_for_prefill(rows),
+    }
+
+
+@app.get("/scanner/latest_results", response_model=ScannerUploadOut)
+def scanner_latest_results():
+    rows = latest_scan_results()
+    return {
+        "status": "success",
+        "data": rows,
+        "summary": summarize_for_prefill(rows),
+    }
 
 @app.get("/healthz")
 def healthz():

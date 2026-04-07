@@ -1,11 +1,36 @@
-.venv/*
-.venv310/*
+.venv/
+.venv310/
 __pycache__/
 
-# Python caches
+# Python caches and tooling
 *.py[cod]
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Notebook artifacts
+.ipynb_checkpoints/
+notebooks/catboost_info/
+
+# Coverage/test outputs
+.coverage
+coverage.xml
+htmlcov/
 
 # Frontend artifacts
 webapp/node_modules/
 webapp/dist/
+webapp/.vite/
+webapp_new/node_modules/
+webapp_new/dist/
+webapp_new/.vite/
+
+# Generated model artifacts
+data/models/*.pkl
+
+# Generated scanner outputs
+src/btp/scanner/backend/data/processed/*.csv
+
+# OS/editor noise
+.DS_Store
+Thumbs.db

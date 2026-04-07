@@ -17,7 +17,7 @@ import MetricCard from "../components/MetricCard";
 import { fetchAnalytics } from "../api";
 import { normalizeLabel, summarizeDataCategoryRows } from "../utils/dataTaxonomy";
 
-const COLORS = ["#0ea5e9", "#22c55e", "#f97316", "#a78bfa", "#ef4444", "#14b8a6", "#f59e0b", "#8b5cf6"];
+const COLORS = ["#1d8f8a", "#f4a261", "#4f6d9b", "#e76f51", "#2a9d8f", "#264653", "#d47e3f", "#7f8da6"];
 
 export default function MetricsPage() {
   const [data, setData] = useState(null);
@@ -76,6 +76,12 @@ export default function MetricsPage() {
           <p className="muted">Higher bars indicate industries with greater average expected business impact.</p>
           <ResponsiveContainer width="100%" height={320}>
             <BarChart data={industry.slice(0, 12)}>
+              <defs>
+                <linearGradient id="metricsBarGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#1d8f8a" stopOpacity={0.95} />
+                  <stop offset="100%" stopColor="#4f6d9b" stopOpacity={0.9} />
+                </linearGradient>
+              </defs>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="Industry" angle={-20} textAnchor="end" interval={0} height={90} />
               <YAxis />

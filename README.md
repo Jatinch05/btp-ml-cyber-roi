@@ -1,108 +1,123 @@
-ML-Based Cyber Vulnerability Impact & ROI
+Cyber Impact and ROI Platform
 
 Overview
-- Decision-support system that estimates breach financial impact (loss) in millions USD — it does not predict breach likelihood.
-- Uses enriched real + synthetic data; ML estimates expected loss based on industry, attack/data types, scale, and security posture.
-- User-input priority: users provide what they know; only missing/invalid optional fields are filled with defensible industry baselines (IBM/DBIR-style anchors). See FIELD_HANDLING.md.
-- ROI/ROSI: computed from before–after loss estimates minus control cost (final formula configurable).
+- This project estimates cyber incident financial impact and recommends controls with ROI style scoring.
+- It combines model inference, control recommendation logic, analytics APIs, and scanner ingestion.
+- It supports two React frontends:
+	- Existing frontend in webapp
+	- New redesigned frontend in webapp_new
+
+Current Architecture
+- Backend API: src/btp/api.py
+	- FastAPI service for prediction, recommendations, analytics, and scanner endpoints.
+- Inference engine: src/btp/infer.py
+	- CatBoost based prediction with optional field filling from baselines.
+- Recommendation engine: src/btp/mitigation.py
+	- Maps attack type to control recommendations and computes expected return metrics.
+- Scanner integration layer: src/btp/scanner_integration.py
+	- Normalizes raw findings, enriches with NVD and remediation mapping, and builds scan prefill summaries.
+- Scanner runtime assets: src/btp/scanner
+	- Local agent script and remediation reference data used by scanner endpoints.
+- Frontend (stable): webapp
+- Frontend (new redesign): webapp_new
+- Model and metadata artifacts: data/models
+- Training and optimization notebooks: notebooks
 
 Repository Layout
-- Data pipeline: src/btp/enrich.py (merges raw datasets, normalizes fields, applies IBM baselines, computes proxies)
-- Inference: src/btp/infer.py (preprocessing + CatBoost inference; optional fields filled only if missing)
-- API: src/btp/api.py (FastAPI endpoints /healthz, /predict)
-- CLI: src/btp/cli_predict.py (reads JSON/JSONL from stdin, prints predictions)
-- Streamlit prototype: src/btp/stream_app.py (demo dashboard)
-- Notebooks: notebooks/ (training/synthetic generation)
-- Models: data/models/ (expected CatBoost pickle + preprocessing meta)
+- src/btp/api.py: HTTP endpoints and request/response contracts.
+- src/btp/app.py: ASGI entrypoint re-exporting the API app.
+- src/btp/infer.py: Feature preparation and model inference.
+- src/btp/mitigation.py: Control recommendation and ROI style calculations.
+- src/btp/scanner_integration.py: Scanner ingestion and enrichment pipeline.
+- src/btp/scanner/local_scanner.py: Downloaded local scanning agent.
+- data/model_ready: Training-ready datasets.
+- data/models: Serialized model artifacts and metadata.
+- webapp: Original React frontend.
+- webapp_new: New React frontend with theme mode toggle.
 
-Quickstart (Windows, Python 3.10 recommended)
-1) Create and activate a Python 3.10 virtual env
-```powershell
-py -3.10 -m venv .venv310
-.\.venv310\Scripts\Activate.ps1
-python -V
-python -m pip install --upgrade pip
-```
+Backend Endpoints In Use
+- GET /healthz
+- GET /analytics
+- POST /predict
+- POST /recommend-controls
+- POST /predict-and-recommend
+- GET /scanner/readiness
+- GET /scanner/agent
+- GET /scanner/agent.sha256
+- POST /scanner/upload_raw_scan
+- GET /scanner/latest_results
 
-2) Install dependencies
-```powershell
-python -m pip install -r requirements.txt
-# Required for model/API/run
-python -m pip install catboost==1.2.5 fastapi uvicorn
-# Optional (Streamlit dashboard)
-python -m pip install streamlit plotly
-```
+Run Locally (Windows)
 
-3) Prepare data (optional, if you want to regenerate processed/enriched data)
-```powershell
-$env:PYTHONPATH = ".\src"
-python -m btp.enrich
-```
-This writes processed files under data/processed/.
+1. Create and activate virtual environment
 
-4) Run the API
-```powershell
-$env:PYTHONPATH = ".\src"
-uvicorn btp.api:app --reload --port 8000
-```
-Health: http://localhost:8000/healthz
-Docs: http://localhost:8000/docs
+	py -3.10 -m venv .venv310
+	.\.venv310\Scripts\Activate.ps1
+	python -m pip install --upgrade pip
 
-5) Call the API
-POST /predict — body is a list of incidents. Example (minimal: mandatory fields only):
-```json
-[
-	{
-		"Industry": "Finance",
-		"Year": 2024,
-		"Attack_Type": "Phishing",
-		"Data_Type": "PII_Customer",
-		"Records_Compromised": 50000
-	}
-]
-```
-Response:
-```json
-[
-	{ "prediction_musd": 3.45, "fields_filled": ["Employee_Count","Security_Budget_Million_USD","Recovery_Time_Days","Incident_Severity","Baseline_Industry_Cost_Million_USD"] }
-]
-```
+2. Install backend dependencies
 
-6) CLI usage (stdin JSON/JSONL)
-```powershell
-$env:PYTHONPATH = ".\src"
-@"
-{"Industry":"Finance","Year":2024,"Attack_Type":"Phishing","Data_Type":"PII_Customer","Records_Compromised":50000}
-"@ | python -m btp.cli_predict
-```
+	python -m pip install -r requirements.txt
 
-Field Handling (Mandatory vs Optional)
-- Mandatory (must provide): Industry, Year, Attack_Type, Data_Type, Records_Compromised
-- Optional (filled only if missing/invalid): Country, Employee_Count, Security_Budget_Million_USD, Recovery_Time_Days, Incident_Severity, Baseline_Industry_Cost_Million_USD, Canonical_Attack_Vector
-- Policy: User values always take precedence. Only null/zero/negative (for numerics) or null (for strings) will be baseline-filled.
-- See FIELD_HANDLING.md for details and examples.
+3. Start backend API from repo root
 
-Running Local Validation
-```powershell
-python .\test_field_handling.py
-```
-This script demonstrates minimal/full/partial inputs and shows that user values are preserved while missing optional fields are filled.
+	$env:PYTHONPATH = ".\src"
+	uvicorn btp.api:app --host 127.0.0.1 --port 8000 --reload
 
-Models & Artifacts
-- Place trained model artefacts under data/models/ (e.g., impact_regressor_CatBoostRegressor.pkl plus optional preproc_cat.pkl).
-- Inference will auto-select the best available CatBoost model; raises a clear error if none are found.
+4. Start original frontend
 
-Notes & Decisions
-- This project estimates financial impact only; it does not model breach likelihood.
-- ROSI/ROI is computed from before–after loss estimates minus control cost; final policy can be configured in the application layer.
-- Synthetic data can be ablated or reweighted during training to assess performance impact.
+	Set-Location .\webapp
+	npm install
+	npm run dev
 
-Troubleshooting
-- If API fails to start due to missing packages, ensure you installed fastapi and uvicorn.
-- If CatBoost unpickle errors occur, install a compatible version (catboost==1.2.x on Python 3.10 is a safe choice).
-- If module imports fail, set PYTHONPATH to include ./src when running modules (PowerShell: `$env:PYTHONPATH=".\src"`).
+5. Start redesigned frontend
 
-Additional Docs
-- FIELD_HANDLING.md — Mandatory vs optional fields, baseline logic, examples
-- IMPLEMENTATION_NOTES.md — Technical changes and reasoning
-- QUICK_REFERENCE.md — One-page reference for developers
+	Set-Location .\webapp_new
+	npm install
+	npm run dev
+
+Default URLs
+- Backend: http://127.0.0.1:8000
+- API docs: http://127.0.0.1:8000/docs
+- Original frontend: http://127.0.0.1:5173
+- New frontend: http://127.0.0.1:5174
+
+Environment Variables
+- Frontend API base URL (optional): VITE_API_BASE
+	- If not set, frontend defaults to http://127.0.0.1:8000
+- NVD API key (optional but recommended for enrichment reliability): NVD_API_KEY
+
+Field Handling Policy
+- Mandatory input fields:
+	- Industry
+	- Year
+	- Attack_Type
+	- Data_Type
+	- Records_Compromised
+- Optional fields are filled only when missing or invalid:
+	- Country
+	- Employee_Count
+	- Security_Budget_Million_USD
+	- Recovery_Time_Days
+	- Incident_Severity
+	- Baseline_Industry_Cost_Million_USD
+	- Canonical_Attack_Vector
+- User supplied values always win over baseline fills.
+
+Scanner Notes
+- The scanner folder is part of the active architecture.
+- Removing src/btp/scanner entirely will break scanner endpoints and scan workflows in both frontends.
+- If scanner features are no longer needed, feature-flag and remove scanner routes first, then delete scanner assets.
+
+Model Artifacts
+- Runtime expects CatBoost model artifacts in data/models.
+- The inference loader prefers impact_regressor_CatBoostRegressor.pkl and related metadata.
+- Keep model and matching meta files aligned when replacing artifacts.
+
+Common Troubleshooting
+- Import errors when starting API:
+	- Ensure PYTHONPATH is set to .\src before running uvicorn.
+- Frontend says backend unavailable:
+	- Confirm backend is running on port 8000 and CORS allows frontend port in src/btp/api.py.
+- Scanner CVE and severity enrichment sparse:
+	- Install nvdlib and set NVD_API_KEY to improve lookup quality and rate limits.

@@ -375,6 +375,70 @@ export default function DecisionPage() {
             </p>
           </div>
 
+          <div className="card">
+            <h3>Top Recommended Safeguards</h3>
+            <p className="muted">All costs are annual USD estimates. Return is ratio (not percent).</p>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Business Safeguard</th>
+                    <th>Example Tools</th>
+                    <th>Category</th>
+                    <th>Effort</th>
+                    <th>Annual Cost (USD)</th>
+                    <th>Annual Cost Range (USD)</th>
+                    <th>Annual Loss Reduction</th>
+                    <th>Residual Loss (USD)</th>
+                    <th>Expected Return (x)</th>
+                    <th>Return Range (x)</th>
+                    <th>Priority</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {controls.map((c, i) => (
+                    <tr key={`${c.control}-${i}`}>
+                      <td>{c.control}</td>
+                      <td>{c.tool_examples}</td>
+                      <td>{c.control_type}</td>
+                      <td>{c.effort}</td>
+                      <td>{usd(c.cost)}</td>
+                      <td>{rangeText(c.cost_low, c.cost_high, usd)}</td>
+                      <td>{new Intl.NumberFormat('en-US',{style:'percent',maximumFractionDigits:1}).format(c.risk_reduction || 0)}</td>
+                      <td>{usd(c.loss_after)}</td>
+                      <td>{`${ratio(c.rosi)}x`}</td>
+                      <td>{`${rangeText(c.rosi_low, c.rosi_high)}x`}</td>
+                      <td>{c.priority}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="card placeholder-card">
+            <div className="placeholder-badge">Remediation Tools</div>
+            <h3>Quick VAPT Scan</h3>
+            <p className="muted">
+              The scan experience lives on its own page so users can run or upload a scan first, then move into the business case flow.
+            </p>
+            <div className="placeholder-grid">
+              <div>
+                <span>Input mode</span>
+                <strong>Run / upload</strong>
+              </div>
+              <div>
+                <span>Output</span>
+                <strong>Normalized findings</strong>
+              </div>
+              <div>
+                <span>Next step</span>
+                <strong>Controls + ROI</strong>
+              </div>
+            </div>
+            <Link className="ghost-button inline-link" to="/scan">Open Quick VAPT Scan</Link>
+          </div>
+
           <div className="two-col">
             <div className="card">
               <h3>Business Impact Waterfall (USD)</h3>
@@ -436,69 +500,6 @@ export default function DecisionPage() {
             </div>
           </div>
 
-          <div className="card placeholder-card">
-            <div className="placeholder-badge">Separate page</div>
-            <h3>Quick VAPT Scan</h3>
-            <p className="muted">
-              The scan experience now lives on its own page so users can run or upload a scan first, then move into the business case flow.
-            </p>
-            <div className="placeholder-grid">
-              <div>
-                <span>Input mode</span>
-                <strong>Run / upload</strong>
-              </div>
-              <div>
-                <span>Output</span>
-                <strong>Normalized findings</strong>
-              </div>
-              <div>
-                <span>Next step</span>
-                <strong>Controls + ROI</strong>
-              </div>
-            </div>
-            <Link className="ghost-button inline-link" to="/scan">Open Quick VAPT Scan</Link>
-          </div>
-
-          <div className="card">
-            <h3>Top Recommended Safeguards</h3>
-            <p className="muted">All costs are annual USD estimates. Return is ratio (not percent).</p>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Business Safeguard</th>
-                    <th>Example Tools</th>
-                    <th>Category</th>
-                    <th>Effort</th>
-                    <th>Annual Cost (USD)</th>
-                    <th>Annual Cost Range (USD)</th>
-                    <th>Annual Loss Reduction</th>
-                    <th>Residual Loss (USD)</th>
-                    <th>Expected Return (x)</th>
-                    <th>Return Range (x)</th>
-                    <th>Priority</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {controls.map((c, i) => (
-                    <tr key={`${c.control}-${i}`}>
-                      <td>{c.control}</td>
-                      <td>{c.tool_examples}</td>
-                      <td>{c.control_type}</td>
-                      <td>{c.effort}</td>
-                      <td>{usd(c.cost)}</td>
-                      <td>{rangeText(c.cost_low, c.cost_high, usd)}</td>
-                      <td>{new Intl.NumberFormat('en-US',{style:'percent',maximumFractionDigits:1}).format(c.risk_reduction || 0)}</td>
-                      <td>{usd(c.loss_after)}</td>
-                      <td>{`${ratio(c.rosi)}x`}</td>
-                      <td>{`${rangeText(c.rosi_low, c.rosi_high)}x`}</td>
-                      <td>{c.priority}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </div>
       ) : null}
     </section>

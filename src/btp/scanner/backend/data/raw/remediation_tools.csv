@@ -1,0 +1,56 @@
+Vulnerability_Type,Recommended_Control,Mitigation_Tool,Control_Cost_USD,Effectiveness_percent,ROI_Tag
+
+apache,Patch + WAF,ModSecurity,7000,85,High
+nginx,Patch + WAF,ModSecurity,6500,85,High
+tomcat,Patch Management,Automatic Patching,4000,75,Medium
+iis,Patch Management,Windows Update,3500,75,Medium
+http,Enable WAF,ModSecurity,5000,80,High
+https,Enable TLS Hardening,TLS Config,3000,80,High
+
+ssh,Enable MFA + Fail2ban,Fail2ban,2500,90,High
+rdp,Restrict + MFA,Firewall + MFA,3000,85,High
+ms-wbt-server,Disable or Restrict RDP,Firewall Rules,2000,80,High
+telnet,Disable Telnet,Service Removal,0,95,High
+vnc,Enable Authentication + VPN,VPN Setup,2000,80,Medium
+
+ftp,Disable Anonymous FTP,FTP Hardening,1500,80,Medium
+smb,Disable SMBv1 + Segmentation,Firewall Rules,2500,85,High
+netbios-ssn,Disable NetBIOS,Policy Config,1000,80,Medium
+microsoft-ds,SMB Hardening,Group Policy,1500,80,Medium
+nfs,Restrict Exports,NFS ACLs,1500,75,Medium
+
+mysql,Patch + Strong Auth,DB Hardening,3000,80,High
+postgresql,Patch + Strong Auth,DB Hardening,3000,80,High
+mssql,Patch + Encryption,DB Hardening,3500,80,High
+mongodb,Enable Auth + Firewall,DB Config,2500,75,Medium
+redis,Bind Localhost + Password,Redis Config,1000,80,Medium
+
+smtp,Spam Filter + TLS,Mail Gateway,4000,75,Medium
+imap,Enable TLS + MFA,Mail Config,2000,80,Medium
+pop3,Disable or TLS Only,Mail Config,1500,80,Medium
+
+dns,DNSSEC + Patch,DNS Hardening,2000,70,Medium
+domain,DNSSEC + Patch,DNS Hardening,2000,70,Medium
+rpc,Firewall Restriction,Firewall Rules,1500,75,Medium
+snmp,Disable Public Community,SNMP Config,1000,80,Medium
+ldap,Enable LDAPS + Patch,Directory Hardening,2500,80,Medium
+kerberos,Patch + Strong Policies,Policy Config,2000,80,Medium
+
+docker,Least Privilege + Patch,Docker Hardening,2500,75,Medium
+kubernetes,Network Policies + RBAC,K8s Hardening,4000,80,Medium
+java-rmi,Disable RMI or Patch,Service Config,1500,75,Medium
+distccd,Disable Service,Service Removal,0,95,High
+irc,Block Port,Firewall Rules,500,70,Low
+
+Unknown,Network Segmentation,Firewall Rules,2000,50,Medium
+
+msrpc,Firewall Restriction,Firewall Rules,1500,75,Medium
+microsoft windows rpc,Firewall Restriction,Firewall Rules,1500,75,Medium
+microsoft kestrel httpd,Patch + WAF,ModSecurity,5000,80,High
+tornado httpd,Patch + WAF,ModSecurity,5000,80,High
+vmware authentication daemon,Disable/Restrict Service,Service Restriction,1200,70,Medium
+pando-pub,General Hardening,Manual Review,1000,60,Medium
+ici,Manual Review,Manual Review,1000,60,Medium
+ethernetip-1,Network Segmentation,Firewall Rules,2000,60,Medium
+ms-wbt-server,Disable or Restrict RDP,Firewall Rules,2000,80,High
+microsoft-kestrel-httpd,Patch + WAF,ModSecurity,5000,80,High
