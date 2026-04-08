@@ -487,6 +487,52 @@ button:disabled {
   gap: 0.95rem;
 }
 
+.findings-table-container {
+  position: relative;
+}
+
+.findings-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.findings-card-header h3 {
+  margin: 0;
+}
+
+.findings-card .csv-download-btn {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  background: rgba(99, 179, 237, 0.15) !important;
+  border: 1px solid rgba(99, 179, 237, 0.5) !important;
+  color: #90cdf4 !important;
+  border-radius: 6px;
+  padding: 0.22rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  box-shadow: none !important;
+  transform: none !important;
+  line-height: 1.5;
+}
+
+.findings-card:hover .csv-download-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.findings-card .csv-download-btn:hover {
+  background: rgba(99, 179, 237, 0.28) !important;
+  border-color: rgba(99, 179, 237, 0.85) !important;
+  color: #ebf8ff !important;
+  transform: none !important;
+  box-shadow: 0 2px 8px rgba(99, 179, 237, 0.15) !important;
+}
+
 .table-wrap {
   overflow: auto;
   border-radius: 12px;

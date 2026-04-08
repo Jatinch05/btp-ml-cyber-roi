@@ -181,12 +181,32 @@ export default function ScanPage() {
         </div>
       </div>
 
-      <div className="card">
-        <h3>4) Mapped Findings Preview</h3>
+      <div className="card findings-card">
+        <div className="findings-card-header">
+          <h3>4) Mapped Findings Preview</h3>
+          {findingsPreview.length > 0 && (
+            <button
+              className="csv-download-btn"
+              title="Download as CSV"
+              onClick={() => {
+                const headers = ["Host","Port","Service","Attack_Type","Security_Vulnerability_Type","CVE","CVSS_Score","NVD_Severity"];
+                const rows = findingsPreview.map(r => headers.map(h => JSON.stringify(r[h] ?? "")).join(","));
+                const csv = [headers.join(","), ...rows].join("\n");
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+                a.download = "vapt_findings.csv";
+                a.click();
+              }}
+            >
+              ↓ CSV
+            </button>
+          )}
+        </div>
         {findingsPreview.length === 0 ? (
           <p className="muted">No findings available yet. Run the local script and click Refresh Uploaded Results.</p>
         ) : (
-          <div className="table-wrap">
+          <div className="findings-table-container">
+            <div className="table-wrap">
             <table>
               <thead>
                 <tr>
@@ -215,9 +235,11 @@ export default function ScanPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
+
 
       {error ? <div className="card error">{error}</div> : null}
     </section>
