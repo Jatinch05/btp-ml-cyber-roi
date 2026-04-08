@@ -11,7 +11,7 @@ import shutil
 import hashlib
 from pathlib import Path
 
-# ==================== COPIED MAPPING LOGIC ====================
+# ==================== MAPPING LOGIC ====================
 ALIASES = {
     "msrpc": "microsoft windows rpc",
     "ms-wbt-server": "ms-wbt-server",
